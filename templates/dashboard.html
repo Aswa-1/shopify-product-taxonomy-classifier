@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Shopify Product Taxonomy Classifier{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1">Classification Dashboard</h2>
+        <p class="text-muted mb-0">Overview of product catalogue status, classification confidence, and processing jobs.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'import_upload' %}" class="btn btn-success"><i class="bi bi-upload"></i> Upload Excel Catalogue</a>
+        <a href="{% url 'review_queue' %}" class="btn btn-outline-warning"><i class="bi bi-check2-square"></i> Review Low Confidence Queue</a>
+    </div>
+</div>
+
+<!-- Key Stat Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card card-stat p-3 bg-white">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="text-muted fw-normal mb-1">Total Products</h6>
+                    <h3 class="fw-bold mb-0" id="stat-total">{{ total_products }}</h3>
+                </div>
+                <i class="bi bi-box-seam fs-1 text-primary"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-stat p-3 bg-white" style="border-left-color: #198754;">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="text-muted fw-normal mb-1">Processed Successfully</h6>
+                    <h3 class="fw-bold mb-0 text-success" id="stat-processed">{{ processed_count }}</h3>
+                </div>
+                <i class="bi bi-check-circle fs-1 text-success"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-stat p-3 bg-white" style="border-left-color: #ffc107;">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="text-muted fw-normal mb-1">Manual Review Required</h6>
+                    <h3 class="fw-bold mb-0 text-warning" id="stat-review">{{ manual_review_count }}</h3>
+                </div>
+                <i class="bi bi-exclamation-triangle fs-1 text-warning"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-stat p-3 bg-white" style="border-left-color: #dc3545;">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="text-muted fw-normal mb-1">Failed / Pending</h6>
+                    <h3 class="fw-bold mb-0 text-danger" id="stat-failed">{{ failed_count|add:pending_count }}</h3>
+                </div>
+                <i class="bi bi-x-circle fs-1 text-danger"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Confidence Distribution Bar -->
+<div class="card mb-4 border-0 shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title fw-bold mb-3">Confidence Breakdown</h5>
+        <div class="row text-center mb-2">
+            <div class="col-md-4">
+                <span class="badge bg-success px-3 py-2 fs-6 mb-1">High (&ge; 0.80)</span>
+                <h4 class="fw-bold text-success mb-0">{{ high_conf_count }}</h4>
+            </div>
+            <div class="col-md-4">
+                <span class="badge bg-warning text-dark px-3 py-2 fs-6 mb-1">Medium (0.60 - 0.79)</span>
+                <h4 class="fw-bold text-warning mb-0">{{ med_conf_count }}</h4>
+            </div>
+            <div class="col-md-4">
+                <span class="badge bg-danger px-3 py-2 fs-6 mb-1">Low / Review (&lt; 0.60)</span>
+                <h4 class="fw-bold text-danger mb-0">{{ low_conf_count }}</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Active Processing Job Section -->
+{% if active_job %}
+<div class="card mb-4 border-primary shadow-sm">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-gear-wide-connected spinner-border spinner-border-sm me-2"></i> Active Batch Job #{{ active_job.id }}</h5>
+        <span class="badge bg-light text-primary">STATUS: {{ active_job.status }}</span>
+    </div>
+    <div class="card-body">
+        <div class="d-flex justify-content-between mb-2">
+            <span>Progress: <strong>{{ active_job.processed_products }} / {{ active_job.total_products }}</strong> products processed</span>
+            <span><strong>{{ active_job.get_progress_percentage }}%</strong></span>
+        </div>
+        <div class="progress mb-3" style="height: 20px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" style="width: {{ active_job.get_progress_percentage }}%;">
+                {{ active_job.get_progress_percentage }}%
+            </div>
+        </div>
+        <div class="row text-muted text-center fs-7">
+            <div class="col">Success: <strong class="text-success">{{ active_job.successful_products }}</strong></div>
+            <div class="col">Manual Review: <strong class="text-warning">{{ active_job.manual_review_products }}</strong></div>
+            <div class="col">Failed: <strong class="text-danger">{{ active_job.failed_products }}</strong></div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Recent Processing Jobs -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white py-3 fw-bold fs-5">
+        <i class="bi bi-clock-history me-2 text-primary"></i> Processing Jobs History
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Job ID</th>
+                    <th>Status</th>
+                    <th>Total</th>
+                    <th>Processed</th>
+                    <th>Successful</th>
+                    <th>Manual Review</th>
+                    <th>Failed</th>
+                    <th>Created At</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for j in recent_jobs %}
+                <tr>
+                    <td><strong>#{{ j.id }}</strong></td>
+                    <td>
+                        {% if j.status == 'RUNNING' %}<span class="badge bg-primary">RUNNING</span>
+                        {% elif j.status == 'COMPLETED' %}<span class="badge bg-success">COMPLETED</span>
+                        {% else %}<span class="badge bg-secondary">{{ j.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ j.total_products }}</td>
+                    <td>{{ j.processed_products }}</td>
+                    <td class="text-success fw-bold">{{ j.successful_products }}</td>
+                    <td class="text-warning fw-bold">{{ j.manual_review_products }}</td>
+                    <td class="text-danger fw-bold">{{ j.failed_products }}</td>
+                    <td>{{ j.created_at|date:"Y-m-d H:i" }}</td>
+                    <td>
+                        {% if j.status == 'FAILED' or j.status == 'RUNNING' %}
+                        <button class="btn btn-sm btn-outline-primary" onclick="resumeJob({{ j.id }})">Resume</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-4 text-muted">No processing jobs recorded yet. Upload an Excel file to get started.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function resumeJob(jobId) {
+    fetch(`/api/jobs/${jobId}/resume/`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            alert('Job resumed successfully!');
+            location.reload();
+        });
+}
+</script>
+{% endblock %}

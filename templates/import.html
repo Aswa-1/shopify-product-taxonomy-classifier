@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block title %}Import Product Catalogue - Shopify Classifier{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h4 class="fw-bold mb-0"><i class="bi bi-file-earmark-excel text-success me-2"></i> Import Product Catalogue Excel</h4>
+            </div>
+            <div class="card-body p-4">
+                <form id="upload-form" enctype="multipart/form-data">
+                    <div class="mb-4">
+                        <label for="excel-file" class="form-label fw-bold">Select Product Catalogue (.xlsx)</label>
+                        <input type="file" class="form-control form-control-lg" id="excel-file" name="file" accept=".xlsx" required>
+                        <div class="form-text">Upload <code>Product List.xlsx</code> containing products and metadata columns.</div>
+                    </div>
+                    <button type="submit" class="btn btn-success btn-lg w-100" id="btn-submit">
+                        <i class="bi bi-upload me-2"></i> Start Import & Classification Job
+                    </button>
+                </form>
+
+                <!-- Progress Section -->
+                <div id="progress-container" class="mt-4 d-none">
+                    <hr>
+                    <h5 class="fw-bold mb-2">Processing Job Status</h5>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span id="job-info">Job # - Initializing...</span>
+                        <span id="job-percentage" class="fw-bold text-success">0%</span>
+                    </div>
+                    <div class="progress mb-3" style="height: 24px;">
+                        <div id="job-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" style="width: 0%;">
+                            0%
+                        </div>
+                    </div>
+                    <div class="row text-center fs-7">
+                        <div class="col-3">Total: <strong id="stat-total">0</strong></div>
+                        <div class="col-3">Processed: <strong id="stat-processed">0</strong></div>
+                        <div class="col-3">Successful: <strong class="text-success" id="stat-success">0</strong></div>
+                        <div class="col-3">Manual Review: <strong class="text-warning" id="stat-review">0</strong></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('upload-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const fileInput = document.getElementById('excel-file');
+    if (!fileInput.files.length) return;
+
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+
+    const btnSubmit = document.getElementById('btn-submit');
+    btnSubmit.disabled = true;
+    btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Uploading & Starting Processing...';
+
+    fetch('/api/import/', {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => {
+        if (!res.ok) throw new Error('Import upload failed');
+        return res.json();
+    })
+    .then(data => {
+        document.getElementById('progress-container').classList.remove('d-none');
+        pollJobStatus(data.id);
+    })
+    .catch(err => {
+        alert(err.message);
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = '<i class="bi bi-upload me-2"></i> Start Import & Classification Job';
+    });
+});
+
+function pollJobStatus(jobId) {
+    const interval = setInterval(() => {
+        fetch(`/api/jobs/${jobId}/`)
+            .then(res => res.json())
+            .then(job => {
+                document.getElementById('job-info').innerText = `Job #${job.id} - Status: ${job.status}`;
+                document.getElementById('job-percentage').innerText = `${job.progress_percentage}%`;
+                const pbar = document.getElementById('job-progress-bar');
+                pbar.style.width = `${job.progress_percentage}%`;
+                pbar.innerText = `${job.progress_percentage}%`;
+
+                document.getElementById('stat-total').innerText = job.total_products;
+                document.getElementById('stat-processed').innerText = job.processed_products;
+                document.getElementById('stat-success').innerText = job.successful_products;
+                document.getElementById('stat-review').innerText = job.manual_review_products;
+
+                if (job.status === 'COMPLETED' || job.status === 'FAILED') {
+                    clearInterval(interval);
+                    document.getElementById('btn-submit').disabled = false;
+                    document.getElementById('btn-submit').innerHTML = '<i class="bi bi-check-lg me-2"></i> Import Completed! Upload Another File';
+                }
+            });
+    }, 2000);
+}
+</script>
+{% endblock %}

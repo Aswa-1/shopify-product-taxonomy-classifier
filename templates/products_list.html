@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+
+{% block title %}Products Catalogue - Shopify Classifier{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h2 class="fw-bold mb-1">Product Catalogue</h2>
+        <p class="text-muted mb-0">Browse and inspect classified products.</p>
+    </div>
+</div>
+
+<!-- Filters Bar -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3 align-items-center">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" name="q" class="form-control" placeholder="Search by title, SKU, or category..." value="{{ search_q }}">
+                </div>
+            </div>
+            <div class="col-md-2">
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    <option value="COMPLETED" {% if status_filter == 'COMPLETED' %}selected{% endif %}>Completed</option>
+                    <option value="MANUAL_REVIEW" {% if status_filter == 'MANUAL_REVIEW' %}selected{% endif %}>Manual Review</option>
+                    <option value="PENDING" {% if status_filter == 'PENDING' %}selected{% endif %}>Pending</option>
+                    <option value="FAILED" {% if status_filter == 'FAILED' %}selected{% endif %}>Failed</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="confidence" class="form-select">
+                    <option value="">All Confidence Levels</option>
+                    <option value="high" {% if confidence_filter == 'high' %}selected{% endif %}>High (&ge; 0.80)</option>
+                    <option value="medium" {% if confidence_filter == 'medium' %}selected{% endif %}>Medium (0.60 - 0.79)</option>
+                    <option value="low" {% if confidence_filter == 'low' %}selected{% endif %}>Low / Review (&lt; 0.60)</option>
+                </select>
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-funnel"></i> Apply Filter</button>
+                <a href="{% url 'products_list' %}" class="btn btn-outline-secondary">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Products Table -->
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 60px;">Image</th>
+                    <th>Product Title & SKU</th>
+                    <th>Source Category</th>
+                    <th>Selected Shopify Category</th>
+                    <th>Confidence</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in page_obj %}
+                <tr>
+                    <td>
+                        {% with img=p.images.first %}
+                        {% if img and img.image_url %}
+                        <img src="{{ img.image_url }}" class="product-img-thumb" alt="Product Image" onerror="this.src='https://via.placeholder.com/48?text=Error';">
+                        {% else %}
+                        <div class="bg-secondary text-white rounded d-flex align-items-center justify-content-center product-img-thumb"><i class="bi bi-image"></i></div>
+                        {% endif %}
+                        {% endwith %}
+                    </td>
+                    <td>
+                        <a href="{% url 'product_detail' p.id %}" class="fw-bold text-decoration-none text-dark">{{ p.title|truncatechars:55 }}</a>
+                        <div class="text-muted fs-7">SKU: <code>{{ p.product_number }}</code> | Model: {{ p.model_number }}</div>
+                    </td>
+                    <td>
+                        <span class="badge bg-light text-dark border">{{ p.product_category }}</span>
+                        {% if p.product_subcategory %}
+                        <div class="text-muted fs-7">{{ p.product_subcategory }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.classification and p.classification.get_effective_category %}
+                        <small class="fw-semibold text-primary">{{ p.classification.get_effective_category.full_path }}</small>
+                        {% else %}
+                        <span class="text-muted fs-7">Unclassified</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.classification %}
+                        {% with score=p.classification.confidence_score %}
+                        {% if score >= 0.80 %}<span class="badge badge-high">{{ score|floatformat:2 }}</span>
+                        {% elif score >= 0.60 %}<span class="badge badge-medium">{{ score|floatformat:2 }}</span>
+                        {% else %}<span class="badge badge-low">{{ score|floatformat:2 }}</span>
+                        {% endif %}
+                        {% endwith %}
+                        {% else %}
+                        <span class="badge bg-secondary">N/A</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.processing_status == 'COMPLETED' %}<span class="badge bg-success"><i class="bi bi-check-circle"></i> Completed</span>
+                        {% elif p.processing_status == 'MANUAL_REVIEW' %}<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Review Needed</span>
+                        {% elif p.processing_status == 'FAILED' %}<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Failed</span>
+                        {% else %}<span class="badge bg-secondary">{{ p.processing_status }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'product_detail' p.id %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i> View</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center py-5 text-muted">No products found matching the criteria.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer bg-white d-flex justify-content-between align-items-center py-3">
+        <span class="text-muted">Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} products</span>
+        <ul class="pagination mb-0">
+            {% if page_obj.has_previous %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ search_q }}&status={{ status_filter }}&confidence={{ confidence_filter }}">Previous</a></li>
+            {% endif %}
+            <li class="page-item active"><span class="page-link">{{ page_obj.number }}</span></li>
+            {% if page_obj.has_next %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ search_q }}&status={{ status_filter }}&confidence={{ confidence_filter }}">Next</a></li>
+            {% endif %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

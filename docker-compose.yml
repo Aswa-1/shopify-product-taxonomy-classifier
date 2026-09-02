@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  db:
+    image: mariadb:10.11
+    container_name: mariadb_shopify
+    restart: always
+    environment:
+      MYSQL_DATABASE: shopify_classifier
+      MYSQL_ROOT_PASSWORD: rootpassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis_shopify
+    restart: always
+    ports:
+      - "6379:6379"
+
+  web:
+    build: .
+    container_name: django_web
+    restart: always
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py import_shopify_taxonomy &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=True
+      - DATABASE_URL=mysql://root:rootpassword@db:3306/shopify_classifier
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+  celery_worker:
+    build: .
+    container_name: celery_worker
+    restart: always
+    command: celery -A shopify_classifier worker --loglevel=info --concurrency=4
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=True
+      - DATABASE_URL=mysql://root:rootpassword@db:3306/shopify_classifier
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+volumes:
+  mariadb_data:

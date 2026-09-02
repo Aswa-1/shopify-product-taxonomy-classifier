@@ -1,0 +1,203 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ product.title }} - Classification Details{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{% url 'products_list' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to Products</a>
+</div>
+
+<div class="row g-4 mb-4">
+    <!-- Left Column: Product Information -->
+    <div class="col-md-5">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <h4 class="fw-bold mb-1">{{ product.title }}</h4>
+                        <div class="text-muted mb-2">SKU: <code>{{ product.product_number }}</code> | Model: <code>{{ product.model_number }}</code></div>
+                    </div>
+                </div>
+
+                <!-- Product Images Gallery -->
+                <div class="mb-3">
+                    <h6 class="fw-bold mb-2">Product Images ({{ product.images.count }})</h6>
+                    <div class="d-flex gap-2 flex-wrap">
+                        {% for img in product.images.all|slice:":6" %}
+                        <div class="position-relative">
+                            <img src="{{ img.image_url }}" class="rounded border" style="width: 72px; height: 72px; object-fit: cover;" onerror="this.src='https://via.placeholder.com/72?text=Error';">
+                            {% if img.status == 'SUCCESS' %}
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-success" title="Valid Image"><i class="bi bi-check"></i></span>
+                            {% elif img.status == 'FAILED' %}
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" title="Broken Image URL"><i class="bi bi-x"></i></span>
+                            {% endif %}
+                        </div>
+                        {% empty %}
+                        <div class="text-muted fs-7">No images available for this product.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <hr>
+
+                <!-- Metadata Details -->
+                <div class="row g-2 fs-7 mb-3">
+                    <div class="col-6"><strong>Brand:</strong> {{ product.brand|default:"N/A" }}</div>
+                    <div class="col-6"><strong>Collection:</strong> {{ product.collection_name|default:"N/A" }}</div>
+                    <div class="col-6"><strong>Source Category:</strong> {{ product.product_category }}</div>
+                    <div class="col-6"><strong>Sub Category:</strong> {{ product.product_subcategory|default:"N/A" }}</div>
+                    <div class="col-6"><strong>Color:</strong> {{ product.color|default:"N/A" }}</div>
+                    <div class="col-6"><strong>Materials:</strong> {{ product.materials|default:"N/A" }}</div>
+                    <div class="col-6"><strong>Assembly Required:</strong> {{ product.assembly_required|default:"N/A" }}</div>
+                    <div class="col-6"><strong>Country of Origin:</strong> {{ product.country_of_origin|default:"N/A" }}</div>
+                </div>
+
+                {% if product.description %}
+                <div class="mb-3">
+                    <h6 class="fw-bold mb-1">Description</h6>
+                    <p class="text-muted fs-7 mb-0">{{ product.description }}</p>
+                </div>
+                {% else %}
+                <div class="alert alert-warning py-2 fs-7 mb-3"><i class="bi bi-info-circle"></i> Missing Product Description (Text fallback used)</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Classification Results & Alternatives -->
+    <div class="col-md-7">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0"><i class="bi bi-tags text-success me-2"></i> Shopify Classification Result</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary me-2" onclick="reclassifyProduct({{ product.id }})"><i class="bi bi-arrow-repeat"></i> Reclassify</button>
+                    <button class="btn btn-sm btn-success" onclick="approveResult({{ product.id }})"><i class="bi bi-check-lg"></i> Approve</button>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if classification %}
+                <div class="p-3 bg-light rounded border mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted fw-bold">SELECTED SHOPIFY CATEGORY</span>
+                        {% with score=classification.confidence_score %}
+                        {% if score >= 0.80 %}<span class="badge badge-high fs-6">Confidence: {{ score|floatformat:2 }}</span>
+                        {% elif score >= 0.60 %}<span class="badge badge-medium fs-6">Confidence: {{ score|floatformat:2 }}</span>
+                        {% else %}<span class="badge badge-low fs-6">Confidence: {{ score|floatformat:2 }}</span>
+                        {% endif %}
+                        {% endwith %}
+                    </div>
+                    <h4 class="text-primary fw-bold mb-2">{{ classification.get_effective_category_name }}</h4>
+                    <div class="text-muted fs-7">Classifier Mode: <code>{{ classification.model_used }}</code> | Image Used: {{ classification.image_used|yesno:"Yes,No" }}</div>
+                </div>
+
+                <!-- Explanation Box -->
+                <div class="mb-4">
+                    <h6 class="fw-bold mb-1">Classification Explanation & Score Components</h6>
+                    <div class="p-3 border rounded bg-white fs-7 text-muted">
+                        {{ classification.explanation }}
+                    </div>
+                </div>
+
+                <!-- Category Relevant Attributes -->
+                <div class="mb-4">
+                    <h6 class="fw-bold mb-2">Extracted Category Attributes</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle mb-0 fs-7">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Attribute Name</th>
+                                    <th>Extracted Value</th>
+                                    <th>Source</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for attr in classification.attributes.all %}
+                                <tr>
+                                    <td><strong>{{ attr.attribute_name }}</strong></td>
+                                    <td>
+                                        {{ attr.attribute_value }}
+                                        {% if attr.shopify_value_gid %}
+                                        <div class="small text-muted">{{ attr.shopify_value_gid }}</div>
+                                        {% else %}
+                                        <div class="small text-muted">Not mapped</div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="badge bg-secondary mb-1">{{ attr.source }}</div>
+                                        {% if attr.shopify_value_gid %}
+                                        <div class="small text-muted">GID: {{ attr.shopify_value_gid }}</div>
+                                        {% endif %}
+                                        <div class="small text-muted">Confidence: {{ attr.confidence_score|floatformat:2 }}</div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="3" class="text-center text-muted py-2">No category attributes extracted.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Alternative Category Suggestions -->
+                <div>
+                    <h6 class="fw-bold mb-2">Top Alternative Suggestions</h6>
+                    <div class="list-group">
+                        {% for alt in classification.alternatives.all %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+                            <div>
+                                <span class="badge bg-secondary me-2">#{{ alt.rank }}</span>
+                                <strong>{{ alt.category.full_path }}</strong>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-outline-dark border text-dark">{{ alt.confidence_score|floatformat:2 }}</span>
+                                <button class="btn btn-sm btn-outline-primary py-0" onclick="selectAlternative({{ product.id }}, {{ alt.category.id }})">Select</button>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="text-muted fs-7">No alternative suggestions available.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-5 text-muted">Product has not been classified yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function approveResult(productId) {
+    fetch(`/api/products/${productId}/approve/`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            alert('Classification approved successfully!');
+            location.reload();
+        });
+}
+
+function reclassifyProduct(productId) {
+    fetch(`/api/products/${productId}/reclassify/`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            alert('Reclassification completed!');
+            location.reload();
+        });
+}
+
+function selectAlternative(productId, categoryId) {
+    fetch(`/api/products/${productId}/update_classification/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category_id: categoryId })
+    })
+    .then(res => res.json())
+    .then(data => {
+        alert('Category updated successfully!');
+        location.reload();
+    });
+}
+</script>
+{% endblock %}
